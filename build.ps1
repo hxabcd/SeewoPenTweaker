@@ -11,7 +11,7 @@ try {
     & windres '.\SeewoPenTweaker.rc' -O coff -o $resourceObject
     if ($LASTEXITCODE -ne 0) { throw 'windres 编译资源失败。' }
 
-    & g++ '.\SeewoPenTweaker.cpp' $resourceObject -o $executable -mwindows -municode -O2 -s -static -static-libgcc -static-libstdc++ -luser32 -lshell32 -ladvapi32
+    & g++ '.\SeewoPenTweaker.cpp' '.\Config.cpp' '.\SettingsWindow.cpp' '.\AboutWindow.cpp' $resourceObject -o $executable -std=c++17 -mwindows -municode -O2 -s -static -static-libgcc -static-libstdc++ -luser32 -lshell32 -ladvapi32 -lwinhttp
     if ($LASTEXITCODE -ne 0) { throw 'g++ 编译失败。' }
 
     $size = (Get-Item $executable).Length

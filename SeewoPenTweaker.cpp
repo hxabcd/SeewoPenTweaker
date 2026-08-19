@@ -1,12 +1,27 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <winhttp.h>
 
+#include "AboutWindow.h"
+#include "Config.h"
+#include "SettingsWindow.h"
+
+#include <array>
+#include <atomic>
 #include <chrono>
+#include <cctype>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
 
 class TrayApp final
 {
 public:
-    explicit TrayApp(HINSTANCE instance) : instance_(instance) {}
+    explicit TrayApp(HINSTANCE instance)
+        : instance_(instance), settingsWindow_(instance), aboutWindow_(instance)
+    {
+    }
 
     TrayApp(const TrayApp&) = delete;
     TrayApp& operator=(const TrayApp&) = delete;
@@ -38,15 +53,35 @@ private:
     static constexpr int HotKeyQ = 2;
     static constexpr int TimerP = 1;
     static constexpr int ExitCommand = 1001;
-    static constexpr int StartupCommand = 1002;
+    static constexpr int UpdateCommand = 1003;
+    static constexpr int SettingsCommand = 1004;
+    static constexpr int AboutCommand = 1005;
+    static constexpr int AutoUpdateTimer = 2;
     static constexpr int IconResourceId = 101;
     static constexpr UINT TrayMessage = WM_APP + 1;
+    static constexpr UINT UpdateMessage = WM_APP + 2;
+    static constexpr UINT AutoUpdateInitialDelayMs = 5000;
+    static constexpr char CurrentVersion[] = "1.3.0";
+    static constexpr wchar_t CurrentVersionWide[] = L"1.3.0";
     static constexpr wchar_t WindowClassName[] = L"SeewoPenTweakerWindow";
     static constexpr wchar_t MutexName[] = L"Local\\SeewoPenTweaker.SingleInstance";
     static constexpr wchar_t RunKeyPath[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
     static constexpr wchar_t RunValueName[] = L"SeewoPenTweaker";
+    static constexpr wchar_t GithubApiPath[] = L"/repos/hxabcd/SeewoPenTweaker/releases/latest";
+    static constexpr wchar_t DownloadUrl[] = L"https://github.com/hxabcd/SeewoPenTweaker/releases/latest/download/SeewoPenTweaker.exe";
+
+    struct UpdateResult
+    {
+        bool success{};
+        bool updateAvailable{};
+        bool manual{};
+        std::wstring latestVersion;
+    };
 
     HINSTANCE instance_{};
+    Config config_{};
+    SettingsWindow settingsWindow_;
+    AboutWindow aboutWindow_;
     HWND window_{};
     HANDLE instanceMutex_{};
     NOTIFYICONDATAW trayIcon_{};
@@ -58,6 +93,9 @@ private:
     bool trayAdded_{};
     bool hotkeyPRegistered_{};
     bool hotkeyQRegistered_{};
+    std::atomic<bool> shuttingDown_{};
+    std::atomic<bool> updateCheckRunning_{};
+    std::thread updateThread_;
 
     static LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
@@ -81,6 +119,284 @@ private:
             : app->handleMessage(message, wParam, lParam);
     }
 
+    static void setProcessDpiAwareness()
+    {
+        using SetProcessDpiAwarenessContextFunction = BOOL(WINAPI *)(DPI_AWARENESS_CONTEXT);
+        using SetProcessDpiAwareFunction = BOOL(WINAPI *)();
+
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        if (user32 == nullptr)
+        {
+            return;
+        }
+
+        auto setContext = reinterpret_cast<SetProcessDpiAwarenessContextFunction>(
+            GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
+        if (setContext != nullptr)
+        {
+            setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            return;
+        }
+
+        auto setSystemAware = reinterpret_cast<SetProcessDpiAwareFunction>(
+            GetProcAddress(user32, "SetProcessDPIAware"));
+        if (setSystemAware != nullptr)
+        {
+            setSystemAware();
+        }
+    }
+
+    static DPI_AWARENESS_CONTEXT setThreadDpiAwareness(DPI_AWARENESS_CONTEXT context)
+    {
+        using SetThreadDpiAwarenessContextFunction = DPI_AWARENESS_CONTEXT(WINAPI *)(DPI_AWARENESS_CONTEXT);
+
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        if (user32 == nullptr)
+        {
+            return nullptr;
+        }
+
+        auto setContext = reinterpret_cast<SetThreadDpiAwarenessContextFunction>(
+            GetProcAddress(user32, "SetThreadDpiAwarenessContext"));
+        return setContext == nullptr ? nullptr : setContext(context);
+    }
+
+    static std::array<int, 3> parseVersion(const std::string &version)
+    {
+        std::array<int, 3> parts{};
+        size_t part = 0;
+        int value = 0;
+        bool hasDigits = false;
+
+        for (const char character : version)
+        {
+            if (std::isdigit(static_cast<unsigned char>(character)) != 0)
+            {
+                value = value * 10 + (character - '0');
+                hasDigits = true;
+            }
+            else if (hasDigits)
+            {
+                if (part < parts.size())
+                {
+                    parts[part++] = value;
+                }
+                value = 0;
+                hasDigits = false;
+            }
+        }
+
+        if (hasDigits && part < parts.size())
+        {
+            parts[part] = value;
+        }
+
+        return parts;
+    }
+
+    static bool isNewerVersion(const std::string &latestVersion)
+    {
+        return parseVersion(latestVersion) > parseVersion(CurrentVersion);
+    }
+
+    static bool fetchLatestVersion(std::string &latestVersion)
+    {
+        HINTERNET session = WinHttpOpen(
+            L"SeewoPenTweaker/1.3.0",
+            WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+            WINHTTP_NO_PROXY_NAME,
+            WINHTTP_NO_PROXY_BYPASS,
+            0);
+        if (session == nullptr)
+        {
+            return false;
+        }
+
+        HINTERNET connection = nullptr;
+        HINTERNET request = nullptr;
+        const auto closeHandles = [&]()
+        {
+            if (request != nullptr)
+            {
+                WinHttpCloseHandle(request);
+            }
+            if (connection != nullptr)
+            {
+                WinHttpCloseHandle(connection);
+            }
+            WinHttpCloseHandle(session);
+        };
+
+        WinHttpSetTimeouts(session, 3000, 3000, 5000, 5000);
+        connection = WinHttpConnect(session, L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
+        if (connection == nullptr)
+        {
+            closeHandles();
+            return false;
+        }
+
+        request = WinHttpOpenRequest(
+            connection,
+            L"GET",
+            GithubApiPath,
+            nullptr,
+            WINHTTP_NO_REFERER,
+            WINHTTP_DEFAULT_ACCEPT_TYPES,
+            WINHTTP_FLAG_SECURE);
+        if (request == nullptr)
+        {
+            closeHandles();
+            return false;
+        }
+
+        const wchar_t headers[] =
+            L"Accept: application/vnd.github+json\r\n"
+            L"User-Agent: SeewoPenTweaker\r\n";
+        if (!WinHttpSendRequest(
+                request,
+                headers,
+                static_cast<DWORD>(-1),
+                WINHTTP_NO_REQUEST_DATA,
+                0,
+                0,
+                0) ||
+            !WinHttpReceiveResponse(request, nullptr))
+        {
+            closeHandles();
+            return false;
+        }
+
+        DWORD statusCode = 0;
+        DWORD statusSize = sizeof(statusCode);
+        if (!WinHttpQueryHeaders(
+                request,
+                WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                WINHTTP_HEADER_NAME_BY_INDEX,
+                &statusCode,
+                &statusSize,
+                WINHTTP_NO_HEADER_INDEX) ||
+            statusCode != 200)
+        {
+            closeHandles();
+            return false;
+        }
+
+        std::string response;
+        DWORD available = 0;
+        while (WinHttpQueryDataAvailable(request, &available) && available > 0)
+        {
+            if (available > 1024 * 1024)
+            {
+                closeHandles();
+                return false;
+            }
+
+            std::vector<char> buffer(available);
+            DWORD read = 0;
+            if (!WinHttpReadData(request, buffer.data(), available, &read))
+            {
+                closeHandles();
+                return false;
+            }
+            response.append(buffer.data(), read);
+        }
+
+        closeHandles();
+        const std::string key = "\"tag_name\"";
+        const size_t keyPosition = response.find(key);
+        if (keyPosition == std::string::npos)
+        {
+            return false;
+        }
+
+        const size_t valueStart = response.find('"', keyPosition + key.size());
+        if (valueStart == std::string::npos)
+        {
+            return false;
+        }
+
+        const size_t valueEnd = response.find('"', valueStart + 1);
+        if (valueEnd == std::string::npos || valueEnd <= valueStart + 1)
+        {
+            return false;
+        }
+
+        latestVersion = response.substr(valueStart + 1, valueEnd - valueStart - 1);
+        return !latestVersion.empty();
+    }
+
+    void checkForUpdates(bool manual)
+    {
+        if (updateCheckRunning_.exchange(true))
+        {
+            if (manual)
+            {
+                showMessage(L"正在检查更新，请稍候。", L"SeewoPenTweaker");
+            }
+            return;
+        }
+
+        if (updateThread_.joinable())
+        {
+            updateThread_.join();
+        }
+
+        updateThread_ = std::thread([this, manual]()
+                                    {
+            std::string latestVersion;
+            const bool success = fetchLatestVersion(latestVersion);
+            auto result = std::make_unique<UpdateResult>();
+            result->success = success;
+            result->updateAvailable = success && isNewerVersion(latestVersion);
+            result->manual = manual;
+            result->latestVersion.assign(latestVersion.begin(), latestVersion.end());
+            updateCheckRunning_ = false;
+
+            if (shuttingDown_ || !PostMessageW(
+                    window_,
+                    UpdateMessage,
+                    0,
+                    reinterpret_cast<LPARAM>(result.get())))
+            {
+                return;
+            }
+
+            result.release(); });
+    }
+
+    void handleUpdateResult(LPARAM lParam)
+    {
+        std::unique_ptr<UpdateResult> result(reinterpret_cast<UpdateResult *>(lParam));
+        if (!result->success)
+        {
+            if (result->manual)
+            {
+                showMessage(L"检查更新失败，请检查网络连接。", L"SeewoPenTweaker");
+            }
+            return;
+        }
+
+        if (!result->updateAvailable)
+        {
+            if (result->manual)
+            {
+                showMessage(L"当前已经是最新版本。", L"SeewoPenTweaker");
+            }
+            return;
+        }
+
+        const std::wstring message =
+            L"发现新版本 " + result->latestVersion + L"，是否打开下载页面？";
+        if (MessageBoxW(
+                nullptr,
+                message.c_str(),
+                L"SeewoPenTweaker",
+                MB_YESNO | MB_ICONINFORMATION) == IDYES)
+        {
+            ShellExecuteW(nullptr, L"open", DownloadUrl, nullptr, nullptr, SW_SHOWNORMAL);
+        }
+    }
+
     bool initialize()
     {
         instanceMutex_ = CreateMutexW(nullptr, TRUE, MutexName);
@@ -96,7 +412,14 @@ private:
             return false;
         }
 
-        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        DWORD configError = ERROR_SUCCESS;
+        if (!config_.load(configError))
+        {
+            showError(L"加载配置文件失败", configError);
+            return false;
+        }
+
+        setProcessDpiAwareness();
 
         WNDCLASSW windowClass{};
         windowClass.hInstance = instance_;
@@ -151,7 +474,18 @@ private:
         }
         hotkeyQRegistered_ = true;
 
+        updateAutoUpdateTimer();
+
         return true;
+    }
+
+    void updateAutoUpdateTimer()
+    {
+        KillTimer(window_, AutoUpdateTimer);
+        if (config_.autoUpdateEnabled())
+        {
+            SetTimer(window_, AutoUpdateTimer, AutoUpdateInitialDelayMs, nullptr);
+        }
     }
 
     bool addTrayIcon()
@@ -233,14 +567,14 @@ private:
                 lastP_ = std::chrono::steady_clock::now();
                 hasLastP_ = true;
                 KillTimer(window_, TimerP);
-                SetTimer(window_, TimerP, 300, nullptr);
+                SetTimer(window_, TimerP, config_.pressDelayMs(), nullptr);
             }
             else if (wParam == HotKeyQ)
             {
                 KillTimer(window_, TimerP);
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - lastP_).count();
-                const bool isPair = hasLastP_ && elapsed <= 200;
+                const bool isPair = hasLastP_ && elapsed <= config_.pairWindowMs();
                 releaseLeft();
                 if (isPair)
                 {
@@ -260,6 +594,11 @@ private:
                     leftPressed_ = true;
                 }
             }
+            else if (wParam == AutoUpdateTimer)
+            {
+                KillTimer(window_, AutoUpdateTimer);
+                checkForUpdates(false);
+            }
             return 0;
 
         case WM_COMMAND:
@@ -267,13 +606,33 @@ private:
             {
                 DestroyWindow(window_);
             }
-            else if (LOWORD(wParam) == StartupCommand)
+            else if (LOWORD(wParam) == UpdateCommand)
             {
-                const bool enabled = !isStartupEnabled();
-                DWORD error = ERROR_SUCCESS;
-                if (!setStartupEnabled(enabled, error))
+                checkForUpdates(true);
+            }
+            else if (LOWORD(wParam) == SettingsCommand)
+            {
+                if (!settingsWindow_.show(
+                        window_,
+                        config_,
+                        isStartupEnabled(),
+                        [this](bool enabled, DWORD &error)
+                        {
+                            return setStartupEnabled(enabled, error);
+                        },
+                        [this]()
+                        {
+                            updateAutoUpdateTimer();
+                        }))
                 {
-                    showError(L"设置开机启动失败", error);
+                    showError(L"打开设置窗口失败");
+                }
+            }
+            else if (LOWORD(wParam) == AboutCommand)
+            {
+                if (!aboutWindow_.show(window_, CurrentVersionWide))
+                {
+                    showError(L"打开关于窗口失败");
                 }
             }
             return 0;
@@ -288,10 +647,14 @@ private:
             }
             return 0;
 
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            return 0;
-        }
+            case UpdateMessage:
+                handleUpdateResult(lParam);
+                return 0;
+
+            case WM_DESTROY:
+                PostQuitMessage(0);
+                return 0;
+            }
 
         return DefWindowProcW(window_, message, wParam, lParam);
     }
@@ -299,23 +662,22 @@ private:
     void showMenu()
     {
         const DPI_AWARENESS_CONTEXT previousContext =
-            SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            setThreadDpiAwareness(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         HMENU menu = CreatePopupMenu();
         if (menu == nullptr)
         {
             if (previousContext != nullptr)
             {
-                SetThreadDpiAwarenessContext(previousContext);
+                setThreadDpiAwareness(previousContext);
             }
             return;
         }
 
         AppendMenuW(menu, MF_GRAYED, 0, L"状态: 运行中");
-        AppendMenuW(
-            menu,
-            MF_STRING | (isStartupEnabled() ? MF_CHECKED : MF_UNCHECKED),
-            StartupCommand,
-            L"开机启动");
+        AppendMenuW(menu, MF_STRING, SettingsCommand, L"设置");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, UpdateCommand, L"检查更新");
+        AppendMenuW(menu, MF_STRING, AboutCommand, L"关于");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, ExitCommand, L"退出");
 
@@ -328,7 +690,7 @@ private:
 
         if (previousContext != nullptr)
         {
-            SetThreadDpiAwarenessContext(previousContext);
+            setThreadDpiAwareness(previousContext);
         }
     }
 
@@ -453,6 +815,18 @@ private:
 
     void shutdown()
     {
+        shuttingDown_ = true;
+        settingsWindow_.close();
+        aboutWindow_.close();
+        if (window_ != nullptr)
+        {
+            KillTimer(window_, AutoUpdateTimer);
+        }
+        if (updateThread_.joinable())
+        {
+            updateThread_.join();
+        }
+
         if (window_ != nullptr)
         {
             KillTimer(window_, TimerP);
