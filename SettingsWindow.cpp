@@ -9,7 +9,7 @@
 namespace
 {
     constexpr int WindowWidth = 420;
-    constexpr int WindowHeight = 206;
+    constexpr int WindowHeight = 238;
     constexpr int Margin = 20;
     constexpr int LabelWidth = 230;
     constexpr int EditWidth = 150;
@@ -211,7 +211,7 @@ void SettingsWindow::createControls()
     createControl(
         0,
         L"STATIC",
-        L"触发右键时间窗口 (毫秒):",
+        L"触发单击时间窗口 (毫秒):",
         SS_LEFT,
         Margin,
         Margin + RowHeight,
@@ -251,13 +251,24 @@ void SettingsWindow::createControls()
         24,
         AutoUpdateCheck);
 
+    shortPressLeftClickCheck_ = createControl(
+        0,
+        L"BUTTON",
+        L"短按模拟左键",
+        BS_AUTOCHECKBOX | WS_TABSTOP,
+        Margin,
+        Margin + RowHeight * 4 + 4,
+        LabelWidth + EditWidth,
+        24,
+        ShortPressLeftClickCheck);
+
     createControl(
         0,
         L"BUTTON",
         L"保存",
         BS_DEFPUSHBUTTON | WS_TABSTOP,
         Margin,
-        Margin + RowHeight * 4 + 10,
+        Margin + RowHeight * 5 + 10,
         100,
         28,
         SaveButton);
@@ -267,7 +278,7 @@ void SettingsWindow::createControls()
         L"取消",
         BS_PUSHBUTTON | WS_TABSTOP,
         Margin + 110,
-        Margin + RowHeight * 4 + 10,
+        Margin + RowHeight * 5 + 10,
         100,
         28,
         CancelButton);
@@ -277,7 +288,7 @@ void SettingsWindow::createControls()
         L"打开配置目录",
         BS_PUSHBUTTON | WS_TABSTOP,
         Margin + 220,
-        Margin + RowHeight * 4 + 10,
+        Margin + RowHeight * 5 + 10,
         140,
         28,
         OpenConfigButton);
@@ -302,6 +313,11 @@ void SettingsWindow::loadValues()
         BM_SETCHECK,
         config_->autoUpdateEnabled() ? BST_CHECKED : BST_UNCHECKED,
         0);
+    SendMessageW(
+        shortPressLeftClickCheck_,
+        BM_SETCHECK,
+        config_->shortPressLeftClickEnabled() ? BST_CHECKED : BST_UNCHECKED,
+        0);
 }
 
 void SettingsWindow::saveValues()
@@ -324,7 +340,7 @@ void SettingsWindow::saveValues()
     const UINT pairWindow = GetDlgItemInt(window_, PairWindowEdit, &translated, FALSE);
     if (!translated || pairWindow < Config::MinimumDelayMs || pairWindow > Config::MaximumDelayMs)
     {
-        MessageBoxW(window_, L"触发右键时间窗口必须在 1 到 60000 毫秒之间。", L"设置", MB_OK | MB_ICONWARNING);
+        MessageBoxW(window_, L"触发单击时间窗口必须在 1 到 60000 毫秒之间。", L"设置", MB_OK | MB_ICONWARNING);
         SetFocus(pairWindowEdit_);
         return;
     }
@@ -333,6 +349,8 @@ void SettingsWindow::saveValues()
     config_->setPairWindowMs(pairWindow);
     config_->setAutoUpdateEnabled(
         SendMessageW(autoUpdateCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    config_->setShortPressLeftClickEnabled(
+        SendMessageW(shortPressLeftClickCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
     const bool startupEnabled =
         SendMessageW(startupCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -431,7 +449,8 @@ LRESULT SettingsWindow::handleMessage(UINT message, WPARAM wParam, LPARAM lParam
 
     case WM_CTLCOLORBTN:
         if (reinterpret_cast<HWND>(lParam) == startupCheck_ ||
-            reinterpret_cast<HWND>(lParam) == autoUpdateCheck_)
+            reinterpret_cast<HWND>(lParam) == autoUpdateCheck_ ||
+            reinterpret_cast<HWND>(lParam) == shortPressLeftClickCheck_)
         {
             SetBkMode(reinterpret_cast<HDC>(wParam), TRANSPARENT);
             return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_BTNFACE));
@@ -444,6 +463,7 @@ LRESULT SettingsWindow::handleMessage(UINT message, WPARAM wParam, LPARAM lParam
         pairWindowEdit_ = nullptr;
         startupCheck_ = nullptr;
         autoUpdateCheck_ = nullptr;
+        shortPressLeftClickCheck_ = nullptr;
         if (font_ != nullptr)
         {
             DeleteObject(font_);

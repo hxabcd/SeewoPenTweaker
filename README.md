@@ -1,62 +1,50 @@
 # SeewoPenTweaker
 
-一个运行在 Windows 系统托盘中的快捷键鼠标转换工具。
+一款适用于希沃翻页笔的增强程序，让你的翻页笔变成鼠标！
+
+通过响应希沃翻页笔按下/松开「AI 键」发出的 Ctrl+Shift+Alt+P/Q 按键来模拟鼠标操作。
 
 [下载](https://github.com/hxabcd/SeewoPenTweaker/releases/latest/download/SeewoPenTweaker.exe) | [镜像下载](https://ghproxy.net/https://github.com/hxabcd/SeewoPenTweaker/releases/latest/download/SeewoPenTweaker.exe)
 
-## 功能
-
-- `Ctrl+Shift+Alt+P`：等待 200ms 后按住鼠标左键
-- `Ctrl+Shift+Alt+Q`：释放鼠标左键
-- 在 `P` 后 200ms 内按 `Q`：释放左键并执行一次鼠标右键点击
-- 通过系统托盘菜单退出程序
-- 防止程序重复启动
-- 支持设置开机启动
-- 支持手动检查更新和自动检查更新提醒
-- 启动失败时显示具体错误信息
-
 ## 使用
 
-1. 从 Release 下载 `SeewoPenTweaker.exe`。
+- **长按**: 左键长按 (200ms 后触发，可配置)
+- **单击**: 右键单击 (200ms 内松开，可配置) (默认右键，可切换为左键)
+
+左键单击已内置于希沃翻页笔，单击圆形图标的按钮即可，长按则对应鼠标移动。这里添加的可切换左键单击是为了适配需要边移动鼠标边左键单击的场景。
+
+暂未添加右键长按，因为没有想到合适的触发方式，且此操作需求较少。
+
+## 获取
+
+1. 下载 `SeewoPenTweaker.exe`。
 2. 运行程序，图标会出现在系统托盘中。
-3. 使用上述快捷键操作。
-4. 右键点击托盘图标并选择“退出”关闭程序。
 
-如果快捷键注册失败，通常是因为相同快捷键已被其他程序占用。
+可在托盘菜单中退出程序。
 
-“自动检查更新”默认关闭。开启后，程序启动约 5 秒后检查一次 GitHub 最新 Release；发现新版本时只弹出提醒，不会自动下载或替换程序。
+可在托盘菜单的「设置」中调整开机自启、自动检查更新、延时等选项。
+
+自动检查更新默认关闭。开启后，程序启动后会检查一次 GitHub 更新，发现新版本时通过系统通知提醒。
+
+如果快捷键注册失败，通常是因为相同快捷键已被其他程序占用。请自行排查相关程序的快捷键绑定。
+
+如有需要，可使用 `build.ps1` 进行本地编译。 
 
 ## 系统兼容性
 
-- Windows 7：使用系统 DPI 感知回退，支持基本功能。
-- Windows 10 及 Windows 11：支持 Per-Monitor V2 高 DPI 模式。
-- 当前发布版本为 x64 架构。
+- Windows 10/11：完整支持
+- Windows 7: 基本支持，未测试
+- 仅支持 x64 架构
 
-## 本地编译
+## 碎碎念
 
-需要安装 MinGW-w64 G++，然后运行：
+程序除了这篇 README，其他完全使用 Vibe Coding (GPT 5.6 Luna) 编写，开发语言为 C++。
 
-```powershell
-.\build.ps1
-```
+> [!INFO] 为什么是这个图标？
+> 这个程序最开始产生于学校里一个临时的想法。当时的我直接使用网页版豆包（无需登录且国内方便访问，当然也有其他替代品，不过我当时就用的这个）写了[第一版 Python 脚本](https://github.com/hxabcd/SeewoPenTweaker/blob/eed581f856b638b6cbdda2619d90905a36205519/SeewoPenTweaker.pyw)并投入使用，效果出乎意料，完全可用。你豆姐当时也不知道抽什么风，用 Pillow 手绘了一个 20x20 的蓝底里面嵌了一块 15x15 的白色矩形，一旁的朋友直接幻视成了百词斩。既然如此不如将错就错，于是有了现在这个图标。（我认为这是一种传承.jpg）（侵权请联系删除）
 
-也可以手动执行：
+> [!INFO] 为什么使用 C++ / 原生 Win32？
+> 小、快。虽然跟美观沾不上边，UI 也只能使用极为繁琐的那套 Windows 原生，但是好处显而易见：仅几百 KB 的极致体积、运行时极低的内存占用、超快的启动速度、相当可观的兼容性。对于这种小的不能再小的小工具，我认为完全没有必要使用比较大的 UI 框架，Qt, WinForm 都显得有些多余，更不用说饱受诟病的 Electron (chromiumCount++)。C++ 的轻量是首屈一指的（当然你硬要说 Rust 也不是不行，但是我不会）。
 
-```powershell
-New-Item -ItemType Directory -Force .\bin\Release\native-cpp | Out-Null
-windres .\SeewoPenTweaker.rc -O coff -o .\bin\Release\native-cpp\SeewoPenTweaker-res.o
-g++ .\SeewoPenTweaker.cpp .\Config.cpp .\SettingsWindow.cpp .\AboutWindow.cpp .\bin\Release\native-cpp\SeewoPenTweaker-res.o -o .\bin\Release\native-cpp\SeewoPenTweaker.exe -std=c++17 -mwindows -municode -O2 -s -static -static-libgcc -static-libstdc++ -luser32 -lshell32 -ladvapi32 -lwinhttp
-```
-
-生成的原生 Windows EXE 不需要安装 .NET 或其他运行时，体积约为 217KB。
-
-托盘图标使用 DPI 适配尺寸加载；程序内嵌 Per-Monitor V2 DPI 清单，并在显示菜单时设置对应的线程 DPI 上下文。
-
-托盘图标使用 `SeewoPenTweaker.ico`，包含多个尺寸，图案为蓝底白色三栏。
-
-## 技术栈
-
-- C++
-- Win32 API
-- Windows `RegisterHotKey`
-- Windows `SendInput`
+> [!NOTE] 可能的拓展方向？
+> 在我的印象中，长按翻页笔的上一页/下一页按键，还可以触发 Shift+F5 和 Esc。但我不记得哪个对应哪个了，而且新分的班级貌似没有希沃翻页笔。这个可以等开学之后我去其他班级考据一下，有时间可以拓展相关功能（比如按键模组切换/自定义快捷键）。当然，欢迎相关 PR。

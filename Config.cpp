@@ -63,6 +63,11 @@ bool Config::load(DWORD &error)
                              AutoUpdateKey,
                              0,
                              filePath_.c_str()) != 0;
+    shortPressLeftClickEnabled_ = GetPrivateProfileIntW(
+                                      SectionName,
+                                      ShortPressLeftClickKey,
+                                      0,
+                                      filePath_.c_str()) != 0;
     pressDelayMs_ = readDelay(PressDelayKey, DefaultPressDelayMs, filePath_);
     pairWindowMs_ = readDelay(PairWindowKey, DefaultPairWindowMs, filePath_);
 
@@ -86,8 +91,14 @@ bool Config::save(DWORD &error) const
     const std::wstring pressDelay = std::to_wstring(sanitizeDelay(pressDelayMs_));
     const std::wstring pairWindow = std::to_wstring(sanitizeDelay(pairWindowMs_));
     const wchar_t *autoUpdate = autoUpdateEnabled_ ? L"1" : L"0";
+    const wchar_t *shortPressLeftClick = shortPressLeftClickEnabled_ ? L"1" : L"0";
 
     if (!WritePrivateProfileStringW(SectionName, AutoUpdateKey, autoUpdate, filePath_.c_str()) ||
+        !WritePrivateProfileStringW(
+            SectionName,
+            ShortPressLeftClickKey,
+            shortPressLeftClick,
+            filePath_.c_str()) ||
         !WritePrivateProfileStringW(SectionName, PressDelayKey, pressDelay.c_str(), filePath_.c_str()) ||
         !WritePrivateProfileStringW(SectionName, PairWindowKey, pairWindow.c_str(), filePath_.c_str()))
     {

@@ -18,6 +18,9 @@ public:
     bool autoUpdateEnabled() const { return autoUpdateEnabled_; }
     void setAutoUpdateEnabled(bool enabled) { autoUpdateEnabled_ = enabled; }
 
+    bool shortPressLeftClickEnabled() const { return shortPressLeftClickEnabled_; }
+    void setShortPressLeftClickEnabled(bool enabled) { shortPressLeftClickEnabled_ = enabled; }
+
     UINT pressDelayMs() const { return pressDelayMs_; }
     void setPressDelayMs(UINT delayMs) { pressDelayMs_ = delayMs; }
 
@@ -29,6 +32,7 @@ public:
 private:
     static constexpr wchar_t SectionName[] = L"Settings";
     static constexpr wchar_t AutoUpdateKey[] = L"AutoCheckUpdates";
+    static constexpr wchar_t ShortPressLeftClickKey[] = L"ShortPressLeftClick";
     static constexpr wchar_t PressDelayKey[] = L"PressDelayMs";
     static constexpr wchar_t PairWindowKey[] = L"PairWindowMs";
     static constexpr wchar_t DirectoryName[] = L"SeewoPenTweaker";
@@ -38,6 +42,7 @@ private:
     static UINT sanitizeDelay(UINT value);
 
     bool autoUpdateEnabled_{};
+    bool shortPressLeftClickEnabled_{};
     UINT pressDelayMs_{DefaultPressDelayMs};
     UINT pairWindowMs_{DefaultPairWindowMs};
     std::wstring filePath_;

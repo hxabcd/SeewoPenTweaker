@@ -30,9 +30,10 @@ private:
     static constexpr int PairWindowEdit = 2002;
     static constexpr int StartupCheck = 2003;
     static constexpr int AutoUpdateCheck = 2004;
-    static constexpr int SaveButton = 2005;
-    static constexpr int CancelButton = 2006;
-    static constexpr int OpenConfigButton = 2007;
+    static constexpr int ShortPressLeftClickCheck = 2005;
+    static constexpr int SaveButton = 2006;
+    static constexpr int CancelButton = 2007;
+    static constexpr int OpenConfigButton = 2008;
 
     HINSTANCE instance_{};
     HFONT font_{};
@@ -41,6 +42,7 @@ private:
     HWND pairWindowEdit_{};
     HWND startupCheck_{};
     HWND autoUpdateCheck_{};
+    HWND shortPressLeftClickCheck_{};
     bool startupEnabled_{};
     Config *config_{};
     std::function<bool(bool, DWORD &)> startupSetter_;
