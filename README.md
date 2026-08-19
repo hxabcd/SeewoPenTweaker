@@ -20,27 +20,18 @@
 
 ## 本地编译
 
-需要安装 .NET SDK 10.0 或更高版本：
+需要安装 MinGW-w64 GCC：
 
 ```powershell
-dotnet build .\SeewoPenTweaker.csproj
+New-Item -ItemType Directory -Force .\bin\Release\native | Out-Null
+gcc .\SeewoPenTweaker.c -o .\bin\Release\native\SeewoPenTweaker.exe -mwindows -municode -O2 -s -static -static-libgcc -luser32 -lshell32
 ```
 
-生成单文件 Windows 可执行文件：
-
-```powershell
-dotnet publish .\SeewoPenTweaker.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-```
-
-发布文件位于：
-
-```text
-bin\Release\net10.0-windows\win-x64\publish\SeewoPenTweaker.exe
-```
+生成的原生 Windows EXE 不需要安装 .NET 或其他运行时，体积约为几十 KB。
 
 ## 技术栈
 
-- C#
-- WinForms
+- C
+- Win32 API
 - Windows `RegisterHotKey`
-- Windows `mouse_event`
+- Windows `SendInput`
