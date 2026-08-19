@@ -1,5 +1,7 @@
 #include "AboutWindow.h"
 
+#include "AppInfo.h"
+
 #include <shellapi.h>
 
 #include <string>
@@ -11,7 +13,6 @@ namespace
     constexpr int WindowHeight = 150;
     constexpr int Margin = 20;
     constexpr int RowHeight = 28;
-    constexpr wchar_t RepositoryUrl[] = L"https://github.com/hxabcd/SeewoPenTweaker";
 }
 
 AboutWindow::~AboutWindow()
@@ -238,7 +239,7 @@ void AboutWindow::openRepository()
     const HINSTANCE result = ShellExecuteW(
         window_,
         L"open",
-        RepositoryUrl,
+        AppInfo::RepositoryUrl,
         nullptr,
         nullptr,
         SW_SHOWNORMAL);

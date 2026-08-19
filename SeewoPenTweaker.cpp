@@ -1,14 +1,9 @@
-#define INITGUID
 #include <windows.h>
 #include <shellapi.h>
 #include <winhttp.h>
-#include <propkey.h>
-#include <roapi.h>
 #include <shlobj.h>
-#include <shobjidl.h>
-#include <versionhelpers.h>
-#include <winstring.h>
 
+#include "AppInfo.h"
 #include "AboutWindow.h"
 #include "Config.h"
 #include "SettingsWindow.h"
@@ -22,90 +17,6 @@
 #include <thread>
 #include <vector>
 
-namespace
-{
-    DEFINE_GUID(IID_IToastNotificationManagerStatics,
-                0x50ac103f, 0xd235, 0x4598, 0xbb, 0xef, 0x98, 0xfe, 0x4d, 0x1a, 0x3a, 0xd4);
-    DEFINE_GUID(IID_IToastNotificationFactory,
-                0x04124b20, 0x82c6, 0x4229, 0xb1, 0x09, 0xfd, 0x9e, 0xd4, 0x66, 0x2b, 0x53);
-    DEFINE_GUID(IID_IXmlDocument,
-                0xf7f3a506, 0x1e87, 0x42d6, 0xbc, 0xfb, 0xb8, 0xc8, 0x09, 0xfa, 0x54, 0x94);
-    DEFINE_GUID(IID_IXmlDocumentIO,
-                0x6cd0e74e, 0xee65, 0x4489, 0x9e, 0xbf, 0xca, 0x43, 0xe8, 0x7b, 0xa6, 0x37);
-
-    struct ToastNotificationManagerStatics;
-    struct ToastNotificationFactory;
-    struct ToastNotifier;
-    struct ToastNotification;
-    struct XmlDocument;
-    struct XmlDocumentIO;
-
-    struct InspectableVtbl
-    {
-        HRESULT(STDMETHODCALLTYPE *QueryInterface)(void*, REFIID, void**);
-        ULONG(STDMETHODCALLTYPE *AddRef)(void*);
-        ULONG(STDMETHODCALLTYPE *Release)(void*);
-        HRESULT(STDMETHODCALLTYPE *GetIids)(void*, ULONG*, IID**);
-        HRESULT(STDMETHODCALLTYPE *GetRuntimeClassName)(void*, HSTRING*);
-        HRESULT(STDMETHODCALLTYPE *GetTrustLevel)(void*, TrustLevel*);
-    };
-
-    struct ToastNotificationManagerStaticsVtbl
-    {
-        InspectableVtbl base;
-        HRESULT(STDMETHODCALLTYPE *CreateToastNotifier)(ToastNotificationManagerStatics*, ToastNotifier**);
-        HRESULT(STDMETHODCALLTYPE *CreateToastNotifierWithId)(ToastNotificationManagerStatics*, HSTRING, ToastNotifier**);
-    };
-
-    struct ToastNotificationManagerStatics
-    {
-        ToastNotificationManagerStaticsVtbl* lpVtbl;
-    };
-
-    struct ToastNotificationFactoryVtbl
-    {
-        InspectableVtbl base;
-        HRESULT(STDMETHODCALLTYPE *CreateToastNotification)(ToastNotificationFactory*, XmlDocument*, ToastNotification**);
-    };
-
-    struct ToastNotificationFactory
-    {
-        ToastNotificationFactoryVtbl* lpVtbl;
-    };
-
-    struct ToastNotifierVtbl
-    {
-        InspectableVtbl base;
-        HRESULT(STDMETHODCALLTYPE *Show)(ToastNotifier*, ToastNotification*);
-    };
-
-    struct ToastNotifier
-    {
-        ToastNotifierVtbl* lpVtbl;
-    };
-
-    struct ToastNotification
-    {
-        InspectableVtbl* lpVtbl;
-    };
-
-    struct XmlDocument
-    {
-        InspectableVtbl* lpVtbl;
-    };
-
-    struct XmlDocumentIOVtbl
-    {
-        InspectableVtbl base;
-        HRESULT(STDMETHODCALLTYPE *LoadXml)(XmlDocumentIO*, HSTRING);
-    };
-
-    struct XmlDocumentIO
-    {
-        XmlDocumentIOVtbl* lpVtbl;
-    };
-}
-
 class TrayApp final
 {
 public:
@@ -114,8 +25,8 @@ public:
     {
     }
 
-    TrayApp(const TrayApp&) = delete;
-    TrayApp& operator=(const TrayApp&) = delete;
+    TrayApp(const TrayApp &) = delete;
+    TrayApp &operator=(const TrayApp &) = delete;
 
     ~TrayApp()
     {
@@ -150,14 +61,10 @@ private:
     static constexpr int IconResourceId = 101;
     static constexpr UINT TrayMessage = WM_APP + 1;
     static constexpr UINT UpdateMessage = WM_APP + 2;
-    static constexpr char CurrentVersion[] = "1.3.1";
-    static constexpr wchar_t CurrentVersionWide[] = L"1.3.1";
     static constexpr wchar_t WindowClassName[] = L"SeewoPenTweakerWindow";
     static constexpr wchar_t MutexName[] = L"Local\\SeewoPenTweaker.SingleInstance";
     static constexpr wchar_t RunKeyPath[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
     static constexpr wchar_t RunValueName[] = L"SeewoPenTweaker";
-    static constexpr wchar_t GithubApiPath[] = L"/repos/hxabcd/SeewoPenTweaker/releases/latest";
-    static constexpr wchar_t DownloadUrl[] = L"https://github.com/hxabcd/SeewoPenTweaker/releases/latest/download/SeewoPenTweaker.exe";
 
     struct UpdateResult
     {
@@ -189,12 +96,12 @@ private:
 
     static LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
-        TrayApp* app = reinterpret_cast<TrayApp*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        TrayApp *app = reinterpret_cast<TrayApp *>(GetWindowLongPtrW(window, GWLP_USERDATA));
 
         if (message == WM_NCCREATE)
         {
-            const auto* create = reinterpret_cast<const CREATESTRUCTW*>(lParam);
-            app = static_cast<TrayApp*>(create->lpCreateParams);
+            const auto *create = reinterpret_cast<const CREATESTRUCTW *>(lParam);
+            app = static_cast<TrayApp *>(create->lpCreateParams);
             SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app));
             return TRUE;
         }
@@ -205,8 +112,8 @@ private:
         }
 
         return app == nullptr
-            ? DefWindowProcW(window, message, wParam, lParam)
-            : app->handleMessage(message, wParam, lParam);
+                   ? DefWindowProcW(window, message, wParam, lParam)
+                   : app->handleMessage(message, wParam, lParam);
     }
 
     static void setProcessDpiAwareness()
@@ -286,13 +193,13 @@ private:
 
     static bool isNewerVersion(const std::string &latestVersion)
     {
-        return parseVersion(latestVersion) > parseVersion(CurrentVersion);
+        return parseVersion(latestVersion) > parseVersion(AppInfo::Version);
     }
 
     static bool fetchLatestVersion(std::string &latestVersion)
     {
         HINTERNET session = WinHttpOpen(
-            L"SeewoPenTweaker/1.3.1",
+            AppInfo::Name,
             WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
             WINHTTP_NO_PROXY_NAME,
             WINHTTP_NO_PROXY_BYPASS,
@@ -328,7 +235,7 @@ private:
         request = WinHttpOpenRequest(
             connection,
             L"GET",
-            GithubApiPath,
+            AppInfo::GithubApiPath,
             nullptr,
             WINHTTP_NO_REFERER,
             WINHTTP_DEFAULT_ACCEPT_TYPES,
@@ -478,188 +385,8 @@ private:
         showUpdateNotification(result->latestVersion);
     }
 
-    static std::wstring escapeXml(const std::wstring& value)
+    void showUpdateNotification(const std::wstring &latestVersion)
     {
-        std::wstring escaped;
-        for (const wchar_t character : value)
-        {
-            switch (character)
-            {
-            case L'&': escaped += L"&amp;"; break;
-            case L'<': escaped += L"&lt;"; break;
-            case L'>': escaped += L"&gt;"; break;
-            case L'\"': escaped += L"&quot;"; break;
-            case L'\'': escaped += L"&apos;"; break;
-            default: escaped += character; break;
-            }
-        }
-        return escaped;
-    }
-
-    bool ensureToastShortcut() const
-    {
-        wchar_t startMenuPath[MAX_PATH]{};
-        if (SHGetFolderPathW(nullptr, CSIDL_PROGRAMS, nullptr, SHGFP_TYPE_CURRENT, startMenuPath) != S_OK)
-        {
-            return false;
-        }
-
-        const std::wstring shortcutPath = std::wstring(startMenuPath) + L"\\SeewoPenTweaker.lnk";
-        if (GetFileAttributesW(shortcutPath.c_str()) != INVALID_FILE_ATTRIBUTES)
-        {
-            return true;
-        }
-
-        wchar_t executablePath[MAX_PATH]{};
-        const DWORD length = GetModuleFileNameW(nullptr, executablePath, ARRAYSIZE(executablePath));
-        if (length == 0 || length >= ARRAYSIZE(executablePath))
-        {
-            return false;
-        }
-
-        IShellLinkW* shellLink = nullptr;
-        if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
-                                    IID_IShellLinkW, reinterpret_cast<void**>(&shellLink))))
-        {
-            return false;
-        }
-
-        bool success = SUCCEEDED(shellLink->SetPath(executablePath));
-        IPropertyStore* propertyStore = nullptr;
-        if (success)
-        {
-            success = SUCCEEDED(shellLink->QueryInterface(IID_IPropertyStore,
-                                                           reinterpret_cast<void**>(&propertyStore)));
-        }
-
-        if (success)
-        {
-            PROPVARIANT appId{};
-            constexpr wchar_t appUserModelId[] = L"hxabcd.SeewoPenTweaker";
-            const size_t appUserModelIdBytes = sizeof(appUserModelId);
-            appId.vt = VT_LPWSTR;
-            appId.pwszVal = static_cast<wchar_t*>(CoTaskMemAlloc(appUserModelIdBytes));
-            success = appId.pwszVal != nullptr;
-            if (success)
-            {
-                CopyMemory(appId.pwszVal, appUserModelId, appUserModelIdBytes);
-                success = SUCCEEDED(propertyStore->SetValue(PKEY_AppUserModel_ID, appId)) &&
-                    SUCCEEDED(propertyStore->Commit());
-                PropVariantClear(&appId);
-            }
-        }
-
-        if (propertyStore != nullptr)
-        {
-            propertyStore->Release();
-        }
-
-        if (success)
-        {
-            IPersistFile* persistFile = nullptr;
-            success = SUCCEEDED(shellLink->QueryInterface(IID_IPersistFile,
-                                                           reinterpret_cast<void**>(&persistFile)));
-            if (success)
-            {
-                success = SUCCEEDED(persistFile->Save(shortcutPath.c_str(), TRUE));
-                persistFile->Release();
-            }
-        }
-
-        shellLink->Release();
-        return success;
-    }
-
-    bool showToast(const std::wstring& latestVersion)
-    {
-        if (!ensureToastShortcut())
-        {
-            return false;
-        }
-
-        if (FAILED(RoInitialize(RO_INIT_SINGLETHREADED)))
-        {
-            return false;
-        }
-
-        bool success = false;
-        HSTRING_HEADER managerHeader{};
-        HSTRING_HEADER appIdHeader{};
-        HSTRING_HEADER toastHeader{};
-        HSTRING_HEADER xmlHeader{};
-        HSTRING_HEADER contentHeader{};
-        HSTRING managerClass{};
-        HSTRING appId{};
-        HSTRING toastClass{};
-        HSTRING xmlClass{};
-        HSTRING content{};
-        ToastNotificationManagerStatics* manager = nullptr;
-        ToastNotifier* notifier = nullptr;
-        ToastNotificationFactory* factory = nullptr;
-        XmlDocument* document = nullptr;
-        XmlDocumentIO* documentIo = nullptr;
-        ToastNotification* notification = nullptr;
-        IInspectable* inspectable = nullptr;
-
-        const wchar_t* managerName = L"Windows.UI.Notifications.ToastNotificationManager";
-        const wchar_t* toastName = L"Windows.UI.Notifications.ToastNotification";
-        const wchar_t* xmlName = L"Windows.Data.Xml.Dom.XmlDocument";
-        const std::wstring xml =
-            L"<toast><visual><binding template=\"ToastGeneric\"><text>发现新版本 " +
-            escapeXml(latestVersion) +
-            L"</text><text>点击下方按钮打开下载页面。</text></binding></visual><actions>"
-            L"<action content=\"打开下载页面\" activationType=\"protocol\" arguments=\"" +
-            DownloadUrl + L"\"/></actions></toast>";
-
-        if (SUCCEEDED(WindowsCreateStringReference(managerName, lstrlenW(managerName), &managerHeader, &managerClass)) &&
-            SUCCEEDED(RoGetActivationFactory(managerClass, IID_IToastNotificationManagerStatics,
-                                              reinterpret_cast<void**>(&manager))) &&
-            SUCCEEDED(WindowsCreateStringReference(L"hxabcd.SeewoPenTweaker", 23, &appIdHeader, &appId)) &&
-            SUCCEEDED(manager->lpVtbl->CreateToastNotifierWithId(manager, appId, &notifier)) &&
-            SUCCEEDED(WindowsCreateStringReference(toastName, lstrlenW(toastName), &toastHeader, &toastClass)) &&
-            SUCCEEDED(RoGetActivationFactory(toastClass, IID_IToastNotificationFactory,
-                                              reinterpret_cast<void**>(&factory))) &&
-            SUCCEEDED(WindowsCreateStringReference(xmlName, lstrlenW(xmlName), &xmlHeader, &xmlClass)) &&
-            SUCCEEDED(WindowsCreateStringReference(xml.c_str(), static_cast<UINT32>(xml.size()),
-                                                    &contentHeader, &content)) &&
-            SUCCEEDED(RoActivateInstance(xmlClass, &inspectable)) &&
-            SUCCEEDED(reinterpret_cast<InspectableVtbl*>(inspectable)->QueryInterface(
-                inspectable, IID_IXmlDocument, reinterpret_cast<void**>(&document))) &&
-            SUCCEEDED(document->lpVtbl->QueryInterface(document, IID_IXmlDocumentIO,
-                                                         reinterpret_cast<void**>(&documentIo))) &&
-            SUCCEEDED(documentIo->lpVtbl->LoadXml(documentIo, content)) &&
-            SUCCEEDED(factory->lpVtbl->CreateToastNotification(factory, document, &notification)) &&
-            SUCCEEDED(notifier->lpVtbl->Show(notifier, notification)))
-        {
-            success = true;
-        }
-
-        if (notification != nullptr) notification->lpVtbl->Release(notification);
-        if (documentIo != nullptr) documentIo->lpVtbl->base.Release(documentIo);
-        if (document != nullptr) document->lpVtbl->Release(document);
-        if (inspectable != nullptr) reinterpret_cast<InspectableVtbl*>(inspectable)->Release(inspectable);
-        if (factory != nullptr) factory->lpVtbl->base.Release(factory);
-        if (notifier != nullptr) notifier->lpVtbl->base.Release(notifier);
-        if (manager != nullptr) manager->lpVtbl->base.Release(manager);
-        RoUninitialize();
-        return success;
-    }
-
-    void showUpdateNotification(const std::wstring& latestVersion)
-    {
-        if (IsWindows10OrGreater())
-        {
-            if (SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)))
-            {
-                const bool shown = showToast(latestVersion);
-                CoUninitialize();
-                if (shown)
-                {
-                    return;
-                }
-            }
-        }
-
         updateNotificationPending_ = true;
         trayIcon_.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_INFO;
         lstrcpynW(trayIcon_.szInfoTitle, L"SeewoPenTweaker", ARRAYSIZE(trayIcon_.szInfoTitle));
@@ -783,7 +510,7 @@ private:
 
     bool loadScaledIcon()
     {
-        using LoadIconMetricFunction = HRESULT(WINAPI*)(HINSTANCE, PCWSTR, int, HICON*);
+        using LoadIconMetricFunction = HRESULT(WINAPI *)(HINSTANCE, PCWSTR, int, HICON *);
 
         HMODULE commonControls = LoadLibraryW(L"comctl32.dll");
         if (commonControls != nullptr)
@@ -840,7 +567,8 @@ private:
             {
                 KillTimer(window_, TimerP);
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - lastP_).count();
+                                         std::chrono::steady_clock::now() - lastP_)
+                                         .count();
                 const bool isPair = hasLastP_ && elapsed <= config_.pairWindowMs();
                 releaseLeft();
                 if (isPair)
@@ -889,7 +617,7 @@ private:
             }
             else if (LOWORD(wParam) == AboutCommand)
             {
-                if (!aboutWindow_.show(window_, CurrentVersionWide))
+                if (!aboutWindow_.show(window_, AppInfo::VersionWide))
                 {
                     showError(L"打开关于窗口失败");
                 }
@@ -897,28 +625,28 @@ private:
             return 0;
 
         case TrayMessage:
+        {
+            const UINT trayEvent = LOWORD(static_cast<ULONG_PTR>(lParam));
+            if (trayEvent == NIN_BALLOONUSERCLICK && updateNotificationPending_)
             {
-                const UINT trayEvent = LOWORD(static_cast<ULONG_PTR>(lParam));
-                if (trayEvent == NIN_BALLOONUSERCLICK && updateNotificationPending_)
-                {
-                    updateNotificationPending_ = false;
-                    ShellExecuteW(nullptr, L"open", DownloadUrl, nullptr, nullptr, SW_SHOWNORMAL);
-                }
-                else if (trayEvent == WM_RBUTTONUP || trayEvent == WM_LBUTTONUP)
-                {
-                    showMenu();
-                }
+                updateNotificationPending_ = false;
+                ShellExecuteW(nullptr, L"open", AppInfo::DownloadUrl, nullptr, nullptr, SW_SHOWNORMAL);
             }
+            else if (trayEvent == WM_RBUTTONUP || trayEvent == WM_LBUTTONUP)
+            {
+                showMenu();
+            }
+        }
             return 0;
 
-            case UpdateMessage:
-                handleUpdateResult(lParam);
-                return 0;
+        case UpdateMessage:
+            handleUpdateResult(lParam);
+            return 0;
 
-            case WM_DESTROY:
-                PostQuitMessage(0);
-                return 0;
-            }
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
+        }
 
         return DefWindowProcW(window_, message, wParam, lParam);
     }
@@ -979,11 +707,11 @@ private:
     void clickShortPress() const
     {
         const DWORD buttonDown = config_.shortPressLeftClickEnabled()
-                                      ? MOUSEEVENTF_LEFTDOWN
-                                      : MOUSEEVENTF_RIGHTDOWN;
+                                     ? MOUSEEVENTF_LEFTDOWN
+                                     : MOUSEEVENTF_RIGHTDOWN;
         const DWORD buttonUp = config_.shortPressLeftClickEnabled()
-                                    ? MOUSEEVENTF_LEFTUP
-                                    : MOUSEEVENTF_RIGHTUP;
+                                   ? MOUSEEVENTF_LEFTUP
+                                   : MOUSEEVENTF_RIGHTUP;
         sendMouse(buttonDown);
         sendMouse(buttonUp);
     }
@@ -1022,7 +750,7 @@ private:
         return queryResult == ERROR_SUCCESS && (type == REG_SZ || type == REG_EXPAND_SZ);
     }
 
-    bool setStartupEnabled(bool enabled, DWORD& error) const
+    bool setStartupEnabled(bool enabled, DWORD &error) const
     {
         HKEY key{};
         LONG result = RegCreateKeyExW(
@@ -1074,7 +802,7 @@ private:
                 RunValueName,
                 0,
                 REG_SZ,
-                reinterpret_cast<const BYTE*>(command),
+                reinterpret_cast<const BYTE *>(command),
                 (pathLength + 3) * sizeof(wchar_t));
         }
 
@@ -1124,12 +852,12 @@ private:
         }
     }
 
-    static void showMessage(const wchar_t* message, const wchar_t* title)
+    static void showMessage(const wchar_t *message, const wchar_t *title)
     {
         MessageBoxW(nullptr, message, title, MB_OK | MB_ICONINFORMATION);
     }
 
-    static void showError(const wchar_t* action, DWORD error = GetLastError())
+    static void showError(const wchar_t *action, DWORD error = GetLastError())
     {
         wchar_t message[256]{};
         wsprintfW(message, L"%ls\n错误代码: %lu", action, error);
